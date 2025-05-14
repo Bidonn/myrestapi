@@ -1,6 +1,8 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
+using Microsoft.IdentityModel.Tokens;
 using Tutorial6.Models;
+using Tutorial6.Services;
 
 namespace Tutorial6.Controllers;
 
@@ -8,138 +10,44 @@ namespace Tutorial6.Controllers;
 [ApiController]
 public class ClientsController : ControllerBase
 {
-    private readonly string? connectionString;
+    private readonly IClientsService _clients;
 
-    public ClientsController(IConfiguration configuration)
+    public ClientsController(IClientsService clients)
     {
-        connectionString = configuration["ConnectionString"];
+        _clients = clients;
     }
 
 
 
-    /*[HttpGet]
-    public async Task<IActionResult> GetClientsAsync(CancellationToken cancellationToken)
-    {
-        try
-        {
-            await using var con = new SqlConnection(connectionString); // połączenie z bazą
-            await using var cmd = new SqlCommand("select * from client"); // komenda sql
-
-            cmd.Connection = con;
-
-            await con.OpenAsync(cancellationToken);
-
-            SqlDataReader reader = await cmd.ExecuteReaderAsync();
-            IList<Client> clients = new List<Client>();
-            while (await reader.ReadAsync())
-            {
-                Client client = new Client()
-                {
-                    IdClient = (int)reader["IdClient"],
-                    FirstName = (string)reader["FirstName"],
-                    LastName = (string)reader["LastName"],
-                    Email = (string)reader["Email"],
-                    Telephone = (string)reader["Telephone"],
-                    Pesel = (string)reader["Pesel"],
-                };
-                clients.Add(client);
-            }
-
-            return Ok(clients);
-        }
-        catch (Exception ex)
-        {
-            return BadRequest();
-        }
-    }*/
+ 
 
 
     [HttpGet("{id}/trips")]
-    public async Task<IActionResult> GetTripsForClient(string id, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetTripsForClient(int id, CancellationToken cancellationToken)
     {
-        if (!int.TryParse(id, out int idClient))
-        {
-            //jeśli nie id to nie int, błąd
-            return BadRequest("400 Invalid syntax");
-        }
-
-        string query = @"SELECT * FROM Trip, Client_Trip 
-                           Where Client_Trip.IdClient = @idClient and Trip.IdTrip = Client_Trip.IdTrip";
-
-        await using var con = new SqlConnection(connectionString);
-        await using var cmd = new SqlCommand(query);
-        cmd.Connection = con;
         try
         {
-            cmd.Parameters.AddWithValue("@idClient", idClient);
-
-        
-
-            await con.OpenAsync(cancellationToken);
-
-            SqlDataReader reader = await cmd.ExecuteReaderAsync();
-            IList<Object> trips = new List<Object>();
-            while (await reader.ReadAsync())
+            var clients =  await _clients.GetTripsForClient(id, cancellationToken);
+            if (clients.IsNullOrEmpty())
             {
-                var t = new
-                {
-                    ClientId = (int)reader["IdClient"],
-                    IdTrip = (int)reader["IdTrip"],
-                    Name = (string)reader["Name"],
-                    Description = (string)reader["Description"],
-                    DateFrom = (DateTime)reader["DateFrom"],
-                    DateTo = (DateTime)reader["DateTo"],
-                    MaxPeople = (int)reader["MaxPeople"],
-                    RegisteredAt = (int)reader["RegisteredAt"],
-                    //zabezpiezenie, przed wartością NULL
-                    PaymentDate = reader["PaymentDate"] != DBNull.Value ? (int?)reader["PaymentDate"] : null
-                };
-                trips.Add(t);
+                return NotFound();
             }
-
-            if (trips.Count == 0)
-            {
-                //jeśli nie ma wycieczek albo takiego użytkownika, notfound
-                return NotFound("No trips for user or no such user exists.");
-            }
-            // wszystko git
-            return Ok(trips);
+            return Ok(clients);
         }
         catch (Exception e)
         {
             return BadRequest(e.Message);
         }
-
-       
     }
 
     [HttpPost]
     public async Task<IActionResult> AddClientAsync(Client client, CancellationToken cancellationToken)
     {
-
-        await using var con = new SqlConnection(connectionString);
-        await using var cmd = new SqlCommand();
-
+        decimal result;
         try
         {
-            string sql = @"INSERT INTO Client (FirstName, LastName, Email, Telephone, Pesel)
-                        values (@FirstName, @LastName, @Email, @Telephone, @Pesel);
-                        Select SCOPE_IDENTITY();";
-            cmd.CommandText = sql;
-            cmd.Parameters.AddWithValue("@FirstName", client.FirstName);
-            cmd.Parameters.AddWithValue("@LastName", client.LastName);
-            cmd.Parameters.AddWithValue("@Email", client.Email);
-            cmd.Parameters.AddWithValue("@Telephone", client.Telephone);
-            cmd.Parameters.AddWithValue("@Pesel", client.Pesel);
-            cmd.Connection = con;
-
-
-            await con.OpenAsync(cancellationToken);
-
-            decimal result = (decimal)await cmd.ExecuteScalarAsync(cancellationToken);
-
-            //wszystko git, w przeciwnym razie asp sam wyśle badrequest, nie wiem jak to naprawić, znaczy wiem (chyba), ale za dużo roboty
-            return Created("Client", result);
+            result = await _clients.AddClientAsync(client, cancellationToken);
+            return Ok(result+" Client added");
         }
         catch (Exception e)
         {
@@ -150,7 +58,6 @@ public class ClientsController : ControllerBase
     [HttpPut("{IdClient}/trips/{IdTrip}")]
     public async Task<IActionResult> UpdateTripAsync(int IdClient, int IdTrip, CancellationToken cancellationToken)
     {
-
         try
         {
             await using var con = new SqlConnection(connectionString);
