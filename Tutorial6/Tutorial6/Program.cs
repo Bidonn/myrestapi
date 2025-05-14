@@ -1,3 +1,5 @@
+using Tutorial6.Services;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
@@ -7,6 +9,8 @@ builder.Services.AddSwaggerGen();
 
 //1. dodajemy kontrolery do buildera
 builder.Services.AddControllers();
+
+builder.Services.AddScoped<ITripsService, TripsService>();
 
 
 var app = builder.Build();

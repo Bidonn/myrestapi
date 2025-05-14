@@ -1,6 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Data.SqlClient;
 using Tutorial6.Models;
+using Tutorial6.Services;
 
 namespace Tutorial6.Controllers;
 
@@ -8,50 +9,27 @@ namespace Tutorial6.Controllers;
 [ApiController]
 public class TripsController : ControllerBase
 {
-    private readonly string? connectionString;
+    private readonly ITripsService _tripsService;
 
-    public TripsController(IConfiguration configuration)
+    public TripsController(ITripsService tripsService)
     {
-        connectionString = configuration["ConnectionString"];
+        _tripsService = tripsService;
     }
 
     
     [HttpGet]
     public async Task<IActionResult> GetTrips(CancellationToken cancellationToken)
     {
-        
-        using var con = new SqlConnection(connectionString);
-        
         try
         {
-            using var cmd = new SqlCommand("select * from trip");
-            cmd.Connection = con;
-
-            await con.OpenAsync(cancellationToken);
-
-            SqlDataReader reader = await cmd.ExecuteReaderAsync();
-            IList<Trip> trips = new List<Trip>();
-            while (await reader.ReadAsync())
-            {
-                Trip t = new Trip()
-                {
-                    IdTrip = (int)reader["IdTrip"],
-                    Name = (string)reader["Name"],
-                    Description = (string)reader["Description"],
-                    DateFrom = (DateTime)reader["DateFrom"],
-                    DateTo = (DateTime)reader["DateTo"],
-                    MaxPeople = (int)reader["MaxPeople"]
-                };
-                trips.Add(t);
-
-            }
-
+            var trips = await _tripsService.GetTrips(cancellationToken);
             return Ok(trips);
         }
-        catch (Exception ex)
+        catch (Exception e)
         {
-            return BadRequest(ex.Message);
+            return StatusCode(500, e.Message);
         }
+        
     }
     
     
