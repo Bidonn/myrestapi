@@ -58,62 +58,24 @@ public class ClientsController : ControllerBase
     [HttpPut("{IdClient}/trips/{IdTrip}")]
     public async Task<IActionResult> UpdateTripAsync(int IdClient, int IdTrip, CancellationToken cancellationToken)
     {
+        int result;
         try
         {
-            await using var con = new SqlConnection(connectionString);
-            await using var cmd = new SqlCommand();
-            cmd.Connection = con;
-            await con.OpenAsync(cancellationToken);
+            result = await _clients.UpdateTripAsync(IdClient, IdTrip, cancellationToken);
+            if(result == 0)
+                return NotFound("Client not found");
+            if (result == 1)
+                return NotFound("Trip not found");
+            if (result == 2)
+                return BadRequest("Max people limit reached");
+            if (result == 3)
+                return Ok("Trip updated");
             
-            string sql = @"SELECT 1 FROM Client WHERE IdClient = @IdClient;";
-            cmd.CommandText = sql;
-            cmd.Parameters.AddWithValue("@IdClient", IdClient);
-            cmd.Parameters.AddWithValue("@IdTrip", IdTrip);
-            cmd.CommandText = sql;
-            var result = await cmd.ExecuteScalarAsync(cancellationToken);
-            //jeśli nie ma takiego klienta
-            if(result is null)
-                return NotFound("Client not found.");
-
-            sql = @"SELECT 1 FROM TRIP WHERE IdTrip = @IdTrip;";
-            cmd.CommandText = sql;
-            
-            result = await cmd.ExecuteScalarAsync(cancellationToken);
-            //jeśli nie ma takiej wycieczki
-            if (result is null)
-                return NotFound("Trip not found.");
-            
-            
-            sql = @"SELECT MaxPeople FROM TRIP WHERE IdTrip = @IdTrip;";
-            cmd.CommandText = sql;
-            int maxPeople = (int)await cmd.ExecuteScalarAsync(cancellationToken);
-            
-            sql = @"SELECT COUNT(*) FROM Client_Trip WHERE IdTrip = @IdTrip;";
-            cmd.CommandText = sql;
-            int currentPeople = (int)await cmd.ExecuteScalarAsync(cancellationToken);
-            //jeśli max ludzi < obecnie+1
-            if (maxPeople < currentPeople + 1)
-                return Conflict("Maximum number of people on trip.");
-            
-            sql = @"
-            INSERT INTO Client_Trip (IdClient, IdTrip, RegisteredAt)
-            VALUES (@IdClient, @IdTrip, @RegisteredAt);";
-
-            cmd.CommandText = sql;
-            cmd.Parameters.AddWithValue("@RegisteredAt", DateTime.Now.Year*10^4+DateTime.Now.Month*10^2+DateTime.Now.Day);
-
-            int affected = await cmd.ExecuteNonQueryAsync(cancellationToken);
-            
-            //jeśli zmienilismy 1 wiersz lub błąd
-            if (affected == 1)
-                return Ok("All good");
-            else
-                return BadRequest("No good.");
-
+            return BadRequest("Something went wrong");
         }
         catch (Exception e)
         {
-            //jesli o czymś zapomniałem
+            Console.WriteLine(e);
             return BadRequest(e.Message);
         }
     }
@@ -121,37 +83,24 @@ public class ClientsController : ControllerBase
     [HttpDelete("{IdClient}/trips/{IdTrip}")]
     public async Task<IActionResult> DeleteTripAsync(int IdClient, int IdTrip, CancellationToken cancellationToken)
     {
-        await using var con = new SqlConnection(connectionString);
-        await using var cmd = new SqlCommand();
-
-        try
-        {
-            string sql = @"SELECT 1 FROM Client_Trip WHERE IdClient = @IdClient AND IdTrip = @IdTrip;";
-            cmd.CommandText = sql;
-            cmd.Connection = con;
-        
-            cmd.Parameters.AddWithValue("@IdClient", IdClient);
-            cmd.Parameters.AddWithValue("@IdTrip", IdTrip);
-        
-            await con.OpenAsync(cancellationToken);
-        
-            int? res = (int?)await cmd.ExecuteScalarAsync(cancellationToken);
-            //nie znaleziono klienta lub wycieczki
-            if (res is null)
-                return NotFound("No client on such trip was found.");
-        
-            sql = @"DELETE FROM Client_Trip WHERE IdTrip = @IdTrip AND IdClient = @IdClient;";
-            cmd.CommandText = sql;
-            int affected = (int)await cmd.ExecuteNonQueryAsync(cancellationToken);
-        
-            //wszystko g -> wyślij info
-            return Ok($"Affected {affected} trip(s).");
-        }
-        catch (Exception e)
-        {
-            return BadRequest(e.Message);
-        }
-       
+       int result;
+       try
+       {
+           result = await _clients.DeleteTripAsync(IdClient, IdTrip, cancellationToken);
+           if(result == 0)
+               return NotFound("No such client on trip was found.");
+           else if (result == 1)
+               return Ok("Trip deleted");
+           else
+           {
+               return BadRequest();
+           }
+            
+       }
+       catch (Exception e)
+       {
+           return BadRequest(e.Message);
+       }
     }
     
 }
